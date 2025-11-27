@@ -79,7 +79,7 @@ auto TableHandle::InsertRecord(const Record &record) -> RID
   }
 
   page_handle->WriteSlot(slot_id, record.GetNullMap(), record.GetData(), false);
-  BitMap::Set(page_handle->GetBitmap(), slot_id);  // 更新位图
+  BitMap::SetBit(page_handle->GetBitmap(), slot_id, true);   // 更新位图
   tab_hdr_.rec_num_++;
 
   if (BitMap::FindFirst(page_handle->GetBitmap(), tab_hdr_.rec_per_page_, 0, false) == tab_hdr_.rec_per_page_) 
@@ -96,54 +96,60 @@ auto TableHandle::InsertRecord(const Record &record) -> RID
 
 void TableHandle::InsertRecord(const RID &rid, const Record &record)
 {
-  if (rid.PageID() == INVALID_PAGE_ID) {
+  if (rid.PageID() == INVALID_PAGE_ID) 
+  {
     NJUDB_THROW(NJUDB_PAGE_MISS, fmt::format("Page: {}", rid.PageID()));
   }
   //NJUDB_STUDENT_TODO(l1, t3);
-   auto page_handle = FetchPageHandle(rid.PageID());
-    if (BitMap::GetBit(page_handle->GetBitmap(), rid.SlotID())) {
-        buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), false);
-        NJUDB_THROW(NJUDB_RECORD_EXISTS, fmt::format("Record exists at page {} slot {}", rid.PageID(), rid.SlotID()));
-    }
+  auto page_handle = FetchPageHandle(rid.PageID());
+  if (BitMap::GetBit(page_handle->GetBitmap(), rid.SlotID())) 
+  {
+      buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), false);
+      NJUDB_THROW(NJUDB_RECORD_EXISTS, fmt::format("Record exists at page {} slot {}", rid.PageID(), rid.SlotID()));
+  }
 
-    page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), false);
-    BitMap::Set(page_handle->GetBitmap(), rid.SlotID());
-    tab_hdr_.rec_num_++;
-    buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), true);
+  page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), false);
+ // BitMap::Set(page_handle->GetBitmap(), rid.SlotID());
+  BitMap::SetBit(page_handle->GetBitmap(), rid.SlotID(), true);   // 更新位图 
+  tab_hdr_.rec_num_++;
+  buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), true);
 }
 
 void TableHandle::DeleteRecord(const RID &rid) 
 { 
   //NJUDB_STUDENT_TODO(l1, t3); 
   auto page_handle = FetchPageHandle(rid.PageID());
-    if (!BitMap::GetBit(page_handle->GetBitmap(), rid.SlotID())) {
-        buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), false);
-        NJUDB_THROW(NJUDB_RECORD_MISS, fmt::format("Record missing at page {} slot {}", rid.PageID(), rid.SlotID()));
-    }
+  if (!BitMap::GetBit(page_handle->GetBitmap(), rid.SlotID())) 
+  {
+      buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), false);
+      NJUDB_THROW(NJUDB_RECORD_MISS, fmt::format("Record missing at page {} slot {}", rid.PageID(), rid.SlotID()));
+  }
+  BitMap::SetBit(page_handle->GetBitmap(), rid.SlotID(), false);// 更新位图
+  //BitMap::Set(page_handle->GetBitmap(), rid.SlotID());
+  tab_hdr_.rec_num_--;
 
-    BitMap::Set(page_handle->GetBitmap(), rid.SlotID());
-    tab_hdr_.rec_num_--;
+  if (BitMap::FindFirst(page_handle->GetBitmap(), tab_hdr_.rec_per_page_, 0, false) == rid.SlotID()) 
+  {
+      // 恢复空闲页面链
+      page_handle->GetPage()->SetNextFreePageId(tab_hdr_.first_free_page_);
+      tab_hdr_.first_free_page_ = rid.PageID();
+  }
 
-    if (BitMap::FindFirst(page_handle->GetBitmap(), tab_hdr_.rec_per_page_, 0, false) == rid.SlotID()) {
-        // 恢复空闲页面链
-        page_handle->GetPage()->SetNextFreePageId(tab_hdr_.first_free_page_);
-        tab_hdr_.first_free_page_ = rid.PageID();
-    }
-
-    buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), true);
+  buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), true);
 }
 
 void TableHandle::UpdateRecord(const RID &rid, const Record &record) 
 { 
   //NJUDB_STUDENT_TODO(l1, t3); 
   auto page_handle = FetchPageHandle(rid.PageID());
-    if (!BitMap::GetBit(page_handle->GetBitmap(), rid.SlotID())) {
-        buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), false);
-        NJUDB_THROW(NJUDB_RECORD_MISS, fmt::format("Record missing at page {} slot {}", rid.PageID(), rid.SlotID()));
-    }
+  if (!BitMap::GetBit(page_handle->GetBitmap(), rid.SlotID())) 
+  {
+      buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), false);
+      NJUDB_THROW(NJUDB_RECORD_MISS, fmt::format("Record missing at page {} slot {}", rid.PageID(), rid.SlotID()));
+  }
 
-    page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), true);
-    buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), true);
+  page_handle->WriteSlot(rid.SlotID(), record.GetNullMap(), record.GetData(), true);
+  buffer_pool_manager_->UnpinPage(table_id_, rid.PageID(), true);
 }
 
 auto TableHandle::FetchPageHandle(page_id_t page_id) -> PageHandleUptr
