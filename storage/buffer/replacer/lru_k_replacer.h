@@ -52,7 +52,7 @@ private:
 
     explicit LRUKNode(frame_id_t fid, size_t k) : fid_(fid), k(k), is_evictable_(false) {}
 
-    void AddHistory(timestamp_t ts) { NJUDB_STUDENT_TODO(l1, f1); }
+    void AddHistory(timestamp_t ts); //{ NJUDB_STUDENT_TODO(l1, f1); }
 
     /**
      * Get the distance between the current timestamp and the k-th timestamp in the history,
@@ -60,14 +60,14 @@ private:
      * @param cur_ts
      * @return
      */
-    auto GetBackwardKDistance(timestamp_t cur_ts) -> unsigned long long
-    {
-      NJUDB_STUDENT_TODO(l1, f1);
-    }
+    auto GetBackwardKDistance(timestamp_t cur_ts) -> unsigned long long;
+    //{
+      //NJUDB_STUDENT_TODO(l1, f1);
+    //}
 
-    [[nodiscard]] auto IsEvictable() const -> bool { NJUDB_STUDENT_TODO(l1, f1); }
+    [[nodiscard]] auto IsEvictable() const -> bool;// { NJUDB_STUDENT_TODO(l1, f1); }
 
-    auto SetEvictable(bool set_evictable) -> void { NJUDB_STUDENT_TODO(l1, f1); }
+    auto SetEvictable(bool set_evictable) -> void; //{ NJUDB_STUDENT_TODO(l1, f1); }
 
   private:
     std::list<timestamp_t> history_;
