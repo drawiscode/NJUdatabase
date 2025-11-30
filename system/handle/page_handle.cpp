@@ -80,16 +80,23 @@ PAXPageHandle::~PAXPageHandle() = default;
 void PAXPageHandle::WriteSlot(size_t slot_id, const char *null_map, const char *data, bool update)
 {
   NJUDB_STUDENT_TODO(l1, f2);
+
 }
 
-void PAXPageHandle::ReadSlot(size_t slot_id, char *null_map, char *data) { NJUDB_STUDENT_TODO(l1, f2); }
+void PAXPageHandle::ReadSlot(size_t slot_id, char *null_map, char *data) 
+{ 
+  NJUDB_STUDENT_TODO(l1, f2); 
+}
 
 auto PAXPageHandle::ReadChunk(const RecordSchema *chunk_schema) -> ChunkUptr
 {
   std::vector<ArrayValueSptr> col_arrs;
   col_arrs.reserve(chunk_schema->GetFieldCount());
   // read data each field and construct ArrayValue
-  NJUDB_STUDENT_TODO(l1, f2);
-  return std::make_unique<Chunk>(chunk_schema, std::move(col_arrs));
+    NJUDB_STUDENT_TODO(l1, f2);
+
+    return std::make_unique<Chunk>(chunk_schema, std::move(col_arrs));
+
 }
+
 }  // namespace njudb

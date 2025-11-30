@@ -33,9 +33,11 @@ TableHandle::TableHandle(DiskManager *disk_manager, BufferPoolManager *buffer_po
 {
   // set table id for table handle;
   schema_->SetTableId(table_id_);
-  if (storage_model_ == PAX_MODEL) {
+  if (storage_model_ == PAX_MODEL) 
+  {
     // calculate offsets of fields
     NJUDB_STUDENT_TODO(l1, f2);
+   
   }
 }
 
@@ -66,7 +68,10 @@ auto TableHandle::GetRecord(const RID &rid) -> RecordUptr
   return std::make_unique<Record>(schema_.get(), nullmap.get(), data.get(), rid);
 }
 
-auto TableHandle::GetChunk(page_id_t pid, const RecordSchema *chunk_schema) -> ChunkUptr { NJUDB_STUDENT_TODO(l1, f2); }
+auto TableHandle::GetChunk(page_id_t pid, const RecordSchema *chunk_schema) -> ChunkUptr 
+{ 
+  NJUDB_STUDENT_TODO(l1, f2); 
+}
 
 auto TableHandle::InsertRecord(const Record &record) -> RID 
 { 
