@@ -27,9 +27,7 @@ namespace njudb {
 
 void LRUKReplacer::LRUKNode::AddHistory(timestamp_t ts)
 {
-  // push new timestamp at the back (newest)
   history_.push_back(ts);
-  // keep only last k timestamps
   if (history_.size() > k) 
   {
     history_.pop_front();
@@ -58,8 +56,9 @@ auto LRUKReplacer::LRUKNode::SetEvictable(bool set_evictable) -> void
 LRUKReplacer::LRUKReplacer(size_t k) : max_size_(BUFFER_POOL_SIZE), k_(k) {}
 
 auto LRUKReplacer::Victim(frame_id_t *frame_id) -> bool 
-{ //NJUDB_STUDENT_TODO(l1, f1);
-    // lock 
+{ 
+  //NJUDB_STUDENT_TODO(l1, f1);
+  // lock 
   std::lock_guard<std::mutex> guard(latch_);
 
   if (cur_size_ == 0) 
@@ -106,7 +105,7 @@ void LRUKReplacer::Pin(frame_id_t frame_id)
 { 
     //NJUDB_STUDENT_TODO(l1, f1); 
     std::lock_guard<std::mutex> guard(latch_);
-    // ensure node exists
+    
     auto it = node_store_.find(frame_id);
     if (it == node_store_.end()) 
     {
@@ -130,8 +129,6 @@ void LRUKReplacer::Pin(frame_id_t frame_id)
     } 
     else 
     {
-      // cur_size_ should not be negative; if we get here, something inconsistent
-      // but we simply clamp to 0 to remain robust
       cur_size_ = 0;
     }
   }
@@ -141,23 +138,20 @@ void LRUKReplacer::Unpin(frame_id_t frame_id)
 { 
     //NJUDB_STUDENT_TODO(l1, f1); 
     std::lock_guard<std::mutex> guard(latch_);
-    // ensure node exists
+    
     auto it = node_store_.find(frame_id);
     if (it == node_store_.end()) 
     {
-        // If not present, create node (no history yet)
         auto res = node_store_.emplace(frame_id, LRUKNode(frame_id, k_));
         it = res.first;
     }
     LRUKNode &node = it->second;
 
-    // If it was previously not evictable, now make it evictable and increase cur_size_
     if (!node.IsEvictable()) 
     {
         node.SetEvictable(true);
         ++cur_size_;
     }
-    // Note: do NOT add access timestamp here. In tests accesses are simulated by Pin().
 }
 
 auto LRUKReplacer::Size() -> size_t 

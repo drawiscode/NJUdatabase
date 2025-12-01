@@ -75,15 +75,14 @@ void LRUReplacer::Pin(frame_id_t frame_id)
     } 
     else 
     {
-        // 在 list 中：若之前是 evictable，需要减少 cur_size_
+        // 在 list 中
         auto it = it_find->second;
-        if (it->second) 
+        if (it->second) //unpin
         {
-            // was evictable -> now pinned (not evictable)
             --cur_size_;
             it->second = false;
         }
-        // 将该节点移动到头部（表示最近使用）
+        // 节点移动到头部 最近使用
         lru_list_.splice(lru_list_.begin(), lru_list_, it);
         // 更新哈希中迭代器指向新的 begin()
         lru_hash_[frame_id] = lru_list_.begin();
