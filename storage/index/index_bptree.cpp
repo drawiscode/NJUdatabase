@@ -60,215 +60,453 @@ static void DebugPrintInternal(const BPTreeInternalPage *internal_node, const Re
 // BPTreePage implementation
 void BPTreePage::Init(idx_id_t index_id, page_id_t page_id, page_id_t parent_id, BPTreeNodeType node_type, int max_size)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  index_id_=index_id;
+  page_id_=page_id;
+  parent_page_id_=parent_id;
+  node_type_=node_type;
+
+  assert((max_size>=0)&&"BPTreePage::Init:error:max_size should be >=0");
+  max_size_=static_cast<size_t>(max_size);
+
+  size_=0;
 }
 
 auto BPTreePage::IsLeaf() const -> bool
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return false;
+  return node_type_==BPTreeNodeType::LEAF;
 }
 
 auto BPTreePage::IsRoot() const -> bool
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return false;
+  return parent_page_id_==INVALID_PAGE_ID;
 }
 
 auto BPTreePage::GetSize() const -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return 0;
+  assert(size_>=0);
+  return static_cast<size_t>(size_);
 }
 
 auto BPTreePage::GetMaxSize() const -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return 0;
+  assert((max_size_>=0)&&"BPTreePage::GetMaxSize():error!max_size should be >=0");
+  return static_cast<size_t>(max_size_);
 }
 
-void BPTreePage::SetSize(int size) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreePage::SetSize(int size) 
+{ 
+  assert((size>=0)&&"BPTreePage::SetSize():size should be >=0");
+  size_=size;
+}
 
 auto BPTreePage::GetPageId() const -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  return page_id_;
 }
 
 auto BPTreePage::GetParentPageId() const -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  return parent_page_id_;
 }
 
-void BPTreePage::SetParentPageId(page_id_t parent_page_id) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreePage::SetParentPageId(page_id_t parent_page_id) 
+{ 
+  parent_page_id_=parent_page_id;  
+}
 
 auto BPTreePage::IsSafe(bool is_insert) const -> bool
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return false;
+  if(is_insert)//insert operation
+  {
+    if(size_==max_size_)
+    {
+      return false;
+    }
+    return true;
+  }
+  else//delete operation
+  {
+    if((size_-1)<(max_size_/2))
+    {
+      return false;
+    }
+    return true;
+  }
 }
 
 // BPTreeLeafPage implementation
 void BPTreeLeafPage::Init(idx_id_t index_id, page_id_t page_id, page_id_t parent_id, int key_size, int max_size)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  BPTreePage::Init(index_id,page_id,parent_id,BPTreeNodeType::LEAF,max_size);
+  next_page_id_=INVALID_PAGE_ID;
+  key_size_=key_size;
 }
 
 auto BPTreeLeafPage::GetNextPageId() const -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  return next_page_id_;
 }
 
-void BPTreeLeafPage::SetNextPageId(page_id_t next_page_id) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeLeafPage::SetNextPageId(page_id_t next_page_id) 
+{ 
+  next_page_id_=next_page_id;   
+}
 
 auto BPTreeLeafPage::KeyAt(int index) const -> const char *
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return nullptr;
+  //NJUDB_ASSERT(index >= 0 && index < GetSize(), "Index out of bounds in KeyAt");
+   NJUDB_ASSERT(index >= 0 && index < GetSize(), "Index out of bounds in KeyAt");
+  return GetKeysArray()+static_cast<size_t>(index)*static_cast<size_t>(key_size_);
 }
 
 auto BPTreeLeafPage::ValueAt(int index) const -> RID
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_RID;
+  NJUDB_ASSERT(index >= 0 && index < GetSize(), "Index out of bounds in ValueAt");
+  return *(GetValuesArray()+index);
 }
 
-void BPTreeLeafPage::SetKeyAt(int index, const char *key) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeLeafPage::SetKeyAt(int index, const char *key) 
+{ 
+  memcpy((void*)(GetKeysArray()+static_cast<size_t>(index)*static_cast<size_t>(key_size_)),key,key_size_);
+}
 
-void BPTreeLeafPage::SetValueAt(int index, const RID &value) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeLeafPage::SetValueAt(int index, const RID &value) 
+{ 
+  //NJUDB_ASSERT(index >= 0 && index <= GetSize(), "Index out of bounds in SetValueAt");
+  RID* target=GetValuesArray()+index;
+  *target=value;
+}
 
 auto BPTreeLeafPage::KeyIndex(const Record &key, const RecordSchema *schema) const -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return size_;
+  //使用二分找到第一个大于等于目标键的位置
+  //如果所有键都小于目标键，返回size_
+  int sz = GetSize();
+  int left=0;
+  int right=sz-1;
+  int ans=sz;
+  while(left<=right)
+  {
+    int mid=(left+right)/2;
+    Record current(schema,nullptr,KeyAt(mid),INVALID_RID);
+    int cmp=Record::Compare(current,key);
+    if(cmp>=0)//current>key
+    {
+      right=mid-1;
+      ans=mid;
+    }
+    else//currnt<key 
+    {
+      left=mid+1;
+    }
+  }
+  return ans;
 }
 
 auto BPTreeLeafPage::LowerBound(const Record &key, const RecordSchema *schema) const -> int
 {
   // Find the first position where key <= keys[pos]
   // This is useful for >= queries
-  NJUDB_STUDENT_TODO(l4, t1);
-  return size_;
+  int sz = GetSize();
+  int left=0;
+  int right=sz-1;
+  int ans=sz;
+  while(left<=right)
+  {
+    int mid=(left+right)/2;
+    Record current(schema,nullptr,KeyAt(mid),INVALID_RID);
+    int cmp=Record::Compare(current,key);
+    if(cmp>=0)//current>key
+    {
+      right=mid-1;
+      ans=mid;
+    }
+    else//currnt<key 
+    {
+      left=mid+1;
+    }
+  }
+  return ans;
 }
 
 auto BPTreeLeafPage::UpperBound(const Record &key, const RecordSchema *schema) const -> int
 {
   // Find the first position where key < keys[pos]
   // This is useful for < queries
-  NJUDB_STUDENT_TODO(l4, t1);
-  return size_;
+  int sz = GetSize();
+  int left=0;
+  int right=sz-1;
+  int ans=sz;
+  while(left<=right)
+  {
+    int mid=(left+right)/2;
+    Record current(schema,nullptr,KeyAt(mid),INVALID_RID);
+    int cmp=Record::Compare(current,key);
+
+    if(cmp>0)//current>key
+    {
+      ans=mid;
+      right=mid-1;
+    }
+    else
+    {
+      left=mid+1;
+    }
+  }
+  return ans;
 }
 
 auto BPTreeLeafPage::Lookup(const Record &key, const RecordSchema *schema) const -> std::vector<RID>
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return {};
+  int l=LowerBound(key,schema);
+  int r=UpperBound(key,schema);
+  std::vector<RID>results;
+  for(int i=l;i<r;i++)
+  {
+    results.push_back(ValueAt(i));
+  }
+  return results;
 }
 
 auto BPTreeLeafPage::Insert(const Record &key, const RID &value, const RecordSchema *schema) -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return size_;
+  int size=GetSize();
+  NJUDB_ASSERT(size<GetMaxSize(),"BPTreeLeafPage::Insert the leafnode is full");
+  
+  int insertPos=LowerBound(key,schema);
+  //move value
+  for(int i=size-1;i>=insertPos;i--)
+  {
+    //value[i+1]=value[i]
+    SetValueAt(i+1,ValueAt(i));
+    //key[i+1]=key[i]
+    SetKeyAt(i+1,KeyAt(i));
+  }
+  //move key
+  SetValueAt(insertPos,value);
+  SetKeyAt(insertPos,key.GetData());
+  //update size
+  SetSize(size+1);
+  return GetSize();
 }
 
-void BPTreeLeafPage::MoveHalfTo(BPTreeLeafPage *recipient) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeLeafPage::MoveHalfTo(BPTreeLeafPage *recipient) 
+{ 
+  int total=GetSize();
+  int start=total/2;
+  int moveCount=total-start;
 
-void BPTreeLeafPage::CopyNFrom(const char *keys, const RID *values, int size) { NJUDB_STUDENT_TODO(l4, t1); }
+  //
+  char *keys=GetKeysArray()+static_cast<size_t>(start)*static_cast<size_t>(key_size_);
+  RID *values=GetValuesArray()+start;
+  recipient->CopyNFrom(keys,values,moveCount);
+
+  SetSize(start);
+}
+
+void BPTreeLeafPage::CopyNFrom(const char *keys, const RID *values, int size) 
+{ 
+  int startPos=GetSize();
+  NJUDB_ASSERT(startPos<GetMaxSize(),"BPTreeLeafPage::CopyNFrom() the leafnode is full");
+  NJUDB_ASSERT(size>0,"BPTreeLeafPage::CopyFrom():the copy size is 0");
+
+  NJUDB_ASSERT(size+startPos<=GetMaxSize(),"BPTreeLeafPage::CopyNFrom() the size is too large");
+  //set values
+  for(int i=startPos;i<startPos+size;i++)
+  {
+    SetValueAt(i,values[i-startPos]);
+  }
+  //set keys
+  char *copyStart=GetKeysArray()+static_cast<size_t>(startPos)*static_cast<size_t>(key_size_);
+  memcpy(copyStart,keys,static_cast<size_t>(size)*static_cast<size_t>(key_size_));
+  
+  SetSize(startPos+size);
+}
 
 auto BPTreeLeafPage::RemoveRecord(const Record &key, const RecordSchema *schema) -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return -1;  // Key-RID pair not found
+  int index = LowerBound(key, schema);
+  int size = GetSize();
+
+  if (index == size) 
+  {
+    return size;
+  }
+
+  Record cur(schema, nullptr, KeyAt(index), INVALID_RID);
+  if (Record::Compare(cur, key) != 0) 
+  {
+    return size;
+  }
+
+  // shift left
+  for (int i = index + 1; i < size; i++) 
+  {
+    SetKeyAt(i - 1, KeyAt(i));
+    SetValueAt(i - 1, ValueAt(i));
+  }
+
+  SetSize(size - 1);
+  return GetSize();
 }
 
-void BPTreeLeafPage::MoveAllTo(BPTreeLeafPage *recipient) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeLeafPage::MoveAllTo(BPTreeLeafPage *recipient) 
+{ 
+  //
+  int moveCount=GetSize();
+  char *keys=GetKeysArray();
+  RID *values=GetValuesArray();
+  recipient->CopyNFrom(keys,values,moveCount);
+  //not sure
+  recipient->SetNextPageId(GetNextPageId());// not sure
+
+  SetSize(0);
+}
 
 // BPTreeInternalPage implementation
 void BPTreeInternalPage::Init(idx_id_t index_id, page_id_t page_id, page_id_t parent_id, int key_size, int max_size)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  BPTreePage::Init(index_id, page_id, parent_id, BPTreeNodeType::INTERNAL, max_size);
+  key_size_ = key_size;
 }
 
 auto BPTreeInternalPage::KeyAt(int index) const -> const char *
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return nullptr;
+  return GetKeysArray() + index * key_size_;
 }
 
 auto BPTreeInternalPage::GetKeySize() const -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return 0;
+  return key_size_;
 }
 
 auto BPTreeInternalPage::ValueAt(int index) const -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  return GetChildrenArray()[index];
 }
 
-void BPTreeInternalPage::SetKeyAt(int index, const char *key) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeInternalPage::SetKeyAt(int index, const char *key) 
+{ 
+   memcpy((void *)KeyAt(index), key, key_size_);
+}
 
-void BPTreeInternalPage::SetValueAt(int index, page_id_t value) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeInternalPage::SetValueAt(int index, page_id_t value) 
+{ 
+  GetChildrenArray()[index] = value;
+}
 
 auto BPTreeInternalPage::Lookup(const Record &key, const RecordSchema *schema) const -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  int size = GetSize();
+  for (int i = 1; i < size; i++) 
+  {
+    Record cur(schema, nullptr, KeyAt(i), INVALID_RID);
+    if (Record::Compare(key, cur) < 0) 
+    {
+      return ValueAt(i - 1);
+    }
+  }
+  return ValueAt(size - 1);
 }
 
 auto BPTreeInternalPage::LookupForLowerBound(const Record &key, const RecordSchema *schema) const -> page_id_t
 {
   // For lower bound, we want to find the leftmost position where key could be inserted
   // This means finding the leftmost child that could contain keys >= key
-  int index = 1;  // Start from 1 since first key is invalid
-
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  int size = GetSize();
+  for (int i = 1; i < size; i++) 
+  {
+    Record cur(schema, nullptr, KeyAt(i), INVALID_RID);
+    if (Record::Compare(key, cur) <= 0) 
+    {
+      return ValueAt(i - 1);
+    }
+  }
+  return ValueAt(size - 1);
 }
 
 auto BPTreeInternalPage::LookupForUpperBound(const Record &key, const RecordSchema *schema) const -> page_id_t
 {
   // For upper bound, we want to find the rightmost position where key could be inserted
   // This means finding the rightmost child that could contain keys <= key
-  int index = 1;  // Start from 1 since first key is invalid
-
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  int size = GetSize();
+  for (int i = 1; i < size; i++) 
+  {
+    Record cur(schema, nullptr, KeyAt(i), INVALID_RID);
+    if (Record::Compare(key, cur) < 0) 
+    {
+      return ValueAt(i - 1);
+    }
+  }
+  return ValueAt(size - 1);
 }
 
 void BPTreeInternalPage::PopulateNewRoot(page_id_t old_root_id, const Record &new_key, page_id_t new_page_id)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  SetValueAt(0, old_root_id);
+  SetKeyAt(1, new_key.GetData());
+  SetValueAt(1, new_page_id);
+  SetSize(2);
 }
 
 auto BPTreeInternalPage::InsertNodeAfter(page_id_t old_value, const Record &new_key, page_id_t new_value) -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return -1;
+  int index = 0;
+  while (index < GetSize() && ValueAt(index) != old_value) 
+  {
+    index++;
+  }
+  index++;
+
+  for (int i = GetSize(); i > index; i--) 
+  {
+    SetKeyAt(i, KeyAt(i - 1));
+    SetValueAt(i, ValueAt(i - 1));
+  }
+
+  SetKeyAt(index, new_key.GetData());
+  SetValueAt(index, new_value);
+  SetSize(GetSize() + 1);
+  return GetSize();
 }
 
-void BPTreeInternalPage::MoveHalfTo(BPTreeInternalPage *recipient, BufferPoolManager *buffer_pool_manager)
+void BPTreeInternalPage::MoveHalfTo(BPTreeInternalPage *recipient, BufferPoolManager *bpm)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  int total = GetSize();
+  int start = total / 2;
+  int move_size = total - start;
+
+  recipient->CopyNFrom(GetKeysArray() + start * key_size_,GetChildrenArray() + start,move_size,bpm);
+
+  SetSize(start);
 }
 
-void BPTreeInternalPage::CopyNFrom(
-    const char *keys, const page_id_t *values, int size, BufferPoolManager *buffer_pool_manager)
+void BPTreeInternalPage::CopyNFrom(const char *keys, const page_id_t *values, int size, BufferPoolManager *bpm)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  int start = GetSize();
+  memcpy(GetKeysArray() + start * key_size_, keys, size * key_size_);
+  memcpy(GetChildrenArray() + start, values, size * sizeof(page_id_t));
+  SetSize(start + size);
+
+  for (int i = start; i < start + size; i++) 
+  {
+    auto guard = bpm->FetchPageWrite(index_id_, ValueAt(i));
+    auto child = reinterpret_cast<BPTreePage *>(PageContentPtr(guard.GetData()));
+    child->SetParentPageId(GetPageId());
+  }
 }
 
-void BPTreeInternalPage::MoveAllTo(
-    BPTreeInternalPage *recipient, const Record &middle_key, BufferPoolManager *buffer_pool_manager)
+void BPTreeInternalPage::MoveAllTo(BPTreeInternalPage *recipient, const Record &middle_key, BufferPoolManager *bpm)
 {
   // For internal nodes, we need to merge:
   // 1. The middle key from the parent (this becomes a key in the recipient)
   // 2. All keys and children from the source node
+  recipient->SetKeyAt(recipient->GetSize(), middle_key.GetData());
+  recipient->SetValueAt(recipient->GetSize(), ValueAt(0));
+  recipient->SetSize(recipient->GetSize() + 1);
 
-  NJUDB_STUDENT_TODO(l4, t1);
+  CopyNFrom(GetKeysArray() + key_size_, GetChildrenArray() + 1, GetSize() - 1, bpm);
+  SetSize(0);
 }
 
 // BPTreeIndex implementation
@@ -335,16 +573,48 @@ void BPTreeIndex::InitializeIndex()
 
 auto BPTreeIndex::NewPage() -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  auto header_guard = buffer_pool_manager_->FetchPageWrite(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<BPTreeIndexHeader *>(header_guard.GetMutableData());
+
+  page_id_t new_page_id = static_cast<page_id_t>(header->page_num_);
+  header->page_num_++;
+
+  return new_page_id;
 }
 
 void BPTreeIndex::DeletePage(page_id_t page_id) { NJUDB_STUDENT_TODO(l4, t1); }
 
 auto BPTreeIndex::FindLeafPage(const Record &key, bool leftMost) -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  auto header_guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(header_guard.GetData());
+
+  page_id_t page_id = header->root_page_id_;
+  if (page_id == INVALID_PAGE_ID) 
+  {
+    return INVALID_PAGE_ID;
+  }
+
+  while (true) 
+  {
+    auto page_guard = buffer_pool_manager_->FetchPageRead(index_id_, page_id);
+    auto page = reinterpret_cast<const BPTreePage *>(page_guard.GetData());
+
+    if (page->IsLeaf()) 
+    {
+      return page_id;
+    }
+
+    auto internal = reinterpret_cast<const BPTreeInternalPage *>(page);
+    if (leftMost) 
+    {
+      page_id = internal->ValueAt(0);
+    } 
+    else 
+    {
+      page_id = internal->Lookup(key, key_schema_);
+    }
+  }
 }
 
 auto BPTreeIndex::FindLeafPageForRange(const Record &key, bool isLowerBound) -> page_id_t
@@ -353,21 +623,178 @@ auto BPTreeIndex::FindLeafPageForRange(const Record &key, bool isLowerBound) -> 
   return INVALID_PAGE_ID;
 }
 
-void BPTreeIndex::StartNewTree(const Record &key, const RID &value) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeIndex::StartNewTree(const Record &key, const RID &value) 
+{ 
+  //分配 root page id
+  page_id_t root_page_id = NewPage();
 
-auto BPTreeIndex::InsertIntoLeaf(const Record &key, const RID &value) -> bool { NJUDB_STUDENT_TODO(l4, t1); }
+  // Fetch root page
+  auto root_guard = buffer_pool_manager_->FetchPageWrite(index_id_, root_page_id);
+  auto leaf = reinterpret_cast<BPTreeLeafPage *>(root_guard.GetMutableData());
+
+  // 初始化 leaf
+  auto header_guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(header_guard.GetData());
+
+  leaf->Init(index_id_, root_page_id, INVALID_PAGE_ID,
+             header->key_size_, header->leaf_max_size_);
+
+  //插入第一条记录
+  leaf->Insert(key, value, key_schema_);
+
+  // 更新 header
+  auto header_guard2 = buffer_pool_manager_->FetchPageWrite(index_id_, FILE_HEADER_PAGE_ID);
+  auto header2 = reinterpret_cast<BPTreeIndexHeader *>(header_guard2.GetMutableData());
+
+  header2->root_page_id_ = root_page_id;
+  header2->tree_height_ = 1;
+  header2->num_entries_ = 1; 
+}
+
+auto BPTreeIndex::InsertIntoLeaf(const Record &key, const RID &value) -> bool 
+{ 
+  page_id_t leaf_page_id = FindLeafPage(key);
+  auto leaf_guard = buffer_pool_manager_->FetchPageWrite(index_id_, leaf_page_id);
+  auto leaf = reinterpret_cast<BPTreeLeafPage *>(leaf_guard.GetMutableData());
+
+  // 1. 如果有空间，直接插
+  if (leaf->GetSize() < leaf->GetMaxSize()) 
+  {
+    leaf->Insert(key, value, key_schema_);
+
+    auto header_guard = buffer_pool_manager_->FetchPageWrite(index_id_, FILE_HEADER_PAGE_ID);
+    auto header = reinterpret_cast<BPTreeIndexHeader *>(header_guard.GetMutableData());
+    header->num_entries_++;
+
+    return true;
+  }
+
+  // 2. 否则，需要 split
+  page_id_t new_leaf_page_id = NewPage();
+  auto new_leaf_guard = buffer_pool_manager_->FetchPageWrite(index_id_, new_leaf_page_id);
+  auto new_leaf = reinterpret_cast<BPTreeLeafPage *>(new_leaf_guard.GetMutableData());
+
+  auto header_guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(header_guard.GetData());
+
+  new_leaf->Init(index_id_, new_leaf_page_id, leaf->GetParentPageId(),
+                 header->key_size_, header->leaf_max_size_);
+
+  // 4. 移动一半到新 leaf
+  leaf->MoveHalfTo(new_leaf);
+
+   // 4. 判断 key 应该插哪一边
+  if (Record::Compare(key, Record(key_schema_, nullptr, new_leaf->KeyAt(0), INVALID_RID)) < 0)
+  {
+    leaf->Insert(key, value, key_schema_);
+  }
+  else
+  {
+    new_leaf->Insert(key, value, key_schema_);
+  }
+
+  // 5. 维护链表
+  new_leaf->SetNextPageId(leaf->GetNextPageId());
+  leaf->SetNextPageId(new_leaf_page_id);
+
+  // 6. 把新 leaf 的第一个 key 插入 parent
+  Record middle_key(key_schema_, nullptr, new_leaf->KeyAt(0), INVALID_RID);
+  InsertIntoParent(leaf_page_id, middle_key, new_leaf_page_id);
+
+  auto header_guard2 = buffer_pool_manager_->FetchPageWrite(index_id_, FILE_HEADER_PAGE_ID);
+  auto header2 = reinterpret_cast<BPTreeIndexHeader *>(header_guard2.GetMutableData());
+  header2->num_entries_++;
+
+  return true;
+}
 
 void BPTreeIndex::InsertIntoParent(page_id_t old_node_id, const Record &key, page_id_t new_node_id)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  auto old_guard = buffer_pool_manager_->FetchPageRead(index_id_, old_node_id);
+  auto old_node = reinterpret_cast<const BPTreePage *>(old_guard.GetData());
+
+  if (old_node->IsRoot()) {
+    InsertIntoNewRoot(old_node_id, key, new_node_id);
+    return;
+  }
+   page_id_t parent_page_id = old_node->GetParentPageId();
+  auto parent_guard = buffer_pool_manager_->FetchPageWrite(index_id_, parent_page_id);
+  auto parent = reinterpret_cast<BPTreeInternalPage *>(parent_guard.GetMutableData());
+
+  if (parent->GetSize() < parent->GetMaxSize()) 
+  {
+    parent->InsertNodeAfter(old_node_id, key, new_node_id);
+    return;
+  }
+  // split internal
+  page_id_t new_parent_page_id = NewPage();
+  auto new_parent_guard = buffer_pool_manager_->FetchPageWrite(index_id_, new_parent_page_id);
+  auto new_parent = reinterpret_cast<BPTreeInternalPage *>(new_parent_guard.GetMutableData());
+
+  auto header_guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(header_guard.GetData());
+
+  new_parent->Init(index_id_, new_parent_page_id,
+                   parent->GetParentPageId(),
+                   header->key_size_, header->internal_max_size_);
+
+  parent->MoveHalfTo(new_parent, buffer_pool_manager_); 
+  if (parent->ValueIndex(old_node_id) != -1) 
+  {
+    parent->InsertNodeAfter(old_node_id, key, new_node_id);
+  } 
+  else 
+  {
+    new_parent->InsertNodeAfter(old_node_id, key, new_node_id);
+  }
+
+  // middle key 上推
+  Record middle_key(key_schema_, nullptr, new_parent->KeyAt(0), INVALID_RID);
+  InsertIntoParent(parent_page_id, middle_key, new_parent_page_id);
 }
 
 void BPTreeIndex::InsertIntoNewRoot(page_id_t old_root_id, const Record &key, page_id_t new_page_id)
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  page_id_t root_page_id = NewPage();
+  auto root_guard = buffer_pool_manager_->FetchPageWrite(index_id_, root_page_id);
+  auto root = reinterpret_cast<BPTreeInternalPage *>(root_guard.GetMutableData());
+
+  auto header_guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(header_guard.GetData());
+
+  root->Init(index_id_, root_page_id, INVALID_PAGE_ID,
+             header->key_size_, header->internal_max_size_);
+
+  root->PopulateNewRoot(old_root_id, key, new_page_id);
+
+  // 更新孩子 parent
+  {
+    auto left = buffer_pool_manager_->FetchPageWrite(index_id_, old_root_id);
+    reinterpret_cast<BPTreePage *>(left.GetMutableData())->SetParentPageId(root_page_id);
+  }
+  {
+    auto right = buffer_pool_manager_->FetchPageWrite(index_id_, new_page_id);
+    reinterpret_cast<BPTreePage *>(right.GetMutableData())->SetParentPageId(root_page_id);
+  }
+
+  auto header_guard2 = buffer_pool_manager_->FetchPageWrite(index_id_, FILE_HEADER_PAGE_ID);
+  auto header2 = reinterpret_cast<BPTreeIndexHeader *>(header_guard2.GetMutableData());
+  header2->root_page_id_ = root_page_id;
+  header2->tree_height_++;
 }
 
-void BPTreeIndex::Insert(const Record &key, const RID &rid) { NJUDB_STUDENT_TODO(l4, t1); }
+void BPTreeIndex::Insert(const Record &key, const RID &rid) 
+{ 
+  std::unique_lock lock(index_latch_);
+
+  if (IsEmpty()) 
+  {
+    StartNewTree(key, rid);
+    return;
+  }
+
+  InsertIntoLeaf(key, rid);
+}
 
 auto BPTreeIndex::Delete(const Record &key) -> bool
 {
@@ -396,12 +823,48 @@ auto BPTreeIndex::AdjustRoot(BPTreePage *old_root_node) -> bool
   return false;
 }
 
-auto BPTreeIndex::Search(const Record &key) -> std::vector<RID> { NJUDB_STUDENT_TODO(l4, t1); }
+auto BPTreeIndex::Search(const Record &key) -> std::vector<RID> 
+{ 
+  std::shared_lock lock(index_latch_);
+
+  page_id_t leaf_id = FindLeafPage(key);
+  if (leaf_id == INVALID_PAGE_ID) 
+  {
+    return {};
+  }
+
+  auto leaf_guard = buffer_pool_manager_->FetchPageRead(index_id_, leaf_id);
+  auto leaf = reinterpret_cast<const BPTreeLeafPage *>(leaf_guard.GetData());
+
+  return leaf->Lookup(key, key_schema_); 
+}
 
 auto BPTreeIndex::SearchRange(const Record &low_key, const Record &high_key) -> std::vector<RID>
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return {};
+  std::shared_lock lock(index_latch_);
+  std::vector<RID> result;
+
+  page_id_t leaf_id = FindLeafPageForRange(low_key, true);
+  while (leaf_id != INVALID_PAGE_ID) 
+  {
+    auto leaf_guard = buffer_pool_manager_->FetchPageRead(index_id_, leaf_id);
+    auto leaf = reinterpret_cast<const BPTreeLeafPage *>(leaf_guard.GetData());
+
+    for (int i = 0; i < leaf->GetSize(); i++) 
+    {
+      Record key(key_schema_,nullptr,leaf->KeyAt(i),INVALID_RID);
+      if (Record::Compare(key, high_key) > 0) 
+      {
+        return result;
+      }
+      if (Record::Compare(key, low_key) >= 0) 
+      {
+        result.push_back(leaf->ValueAt(i));
+      }
+    }
+    leaf_id = leaf->GetNextPageId();
+  }
+  return result;
 }
 
 // Iterator implementation
@@ -411,42 +874,69 @@ BPTreeIndex::BPTreeIterator::BPTreeIterator(BPTreeIndex *tree, page_id_t leaf_pa
 
 auto BPTreeIndex::BPTreeIterator::IsValid() -> bool
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return false;
+  return leaf_page_id_ != INVALID_PAGE_ID;
 }
 
 void BPTreeIndex::BPTreeIterator::Next()
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  auto guard = tree_->buffer_pool_manager_->FetchPageRead(tree_->index_id_, leaf_page_id_);
+  auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
+
+  index_++;
+  if (index_ >= leaf->GetSize()) 
+  {
+    leaf_page_id_ = leaf->GetNextPageId();
+    index_ = 0;
+  }
 }
 
 auto BPTreeIndex::BPTreeIterator::GetKey() -> Record
 {
-  NJUDB_STUDENT_TODO(l4, t1);
+  auto guard = tree_->buffer_pool_manager_->FetchPageRead(tree_->index_id_, leaf_page_id_);
+  auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
+  return Record(tree_->key_schema_, nullptr,leaf->KeyAt(index_),INVALID_RID);
 }
 
 auto BPTreeIndex::BPTreeIterator::GetRID() -> RID
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_RID;
+  auto guard = tree_->buffer_pool_manager_->FetchPageRead(tree_->index_id_, leaf_page_id_);
+  auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
+  return leaf->ValueAt(index_);
 }
 
 auto BPTreeIndex::Begin() -> std::unique_ptr<IIterator>
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return nullptr;
+  if (IsEmpty()) 
+  {
+    return End();
+  }
+
+  // 构造一个“合法但不会被用到”的 Record
+  Record dummy(key_schema_, nullptr, nullptr, INVALID_RID);
+
+  page_id_t leaf_page_id = FindLeafPage(dummy, true);
+  return std::make_unique<BPTreeIterator>(this,leaf_page_id, 0);
 }
 
 auto BPTreeIndex::Begin(const Record &key) -> std::unique_ptr<IIterator>
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return nullptr;
+  if (IsEmpty()) 
+  {
+    return End();
+  }
+
+  page_id_t leaf_page_id = FindLeafPage(key);
+  auto guard = buffer_pool_manager_->FetchPageRead(index_id_, leaf_page_id);
+  auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
+
+  int index = leaf->LowerBound(key, key_schema_);
+
+  return std::make_unique<BPTreeIterator>(this,leaf_page_id, index);
 }
 
 auto BPTreeIndex::End() -> std::unique_ptr<IIterator>
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return nullptr;
+  return std::make_unique<BPTreeIterator>(this, INVALID_PAGE_ID, 0);
 }
 
 void BPTreeIndex::Clear()
@@ -461,20 +951,23 @@ void BPTreeIndex::ClearPage(page_id_t page_id)
 
 auto BPTreeIndex::IsEmpty() -> bool
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return false;
+  auto guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(guard.GetData());
+  return header->num_entries_ == 0;
 }
 
 auto BPTreeIndex::Size() -> size_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return 0;
+  auto guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(guard.GetData());
+  return header->num_entries_;
 }
 
 auto BPTreeIndex::GetHeight() -> int
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return 0;
+  auto guard = buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header = reinterpret_cast<const BPTreeIndexHeader *>(guard.GetData());
+  return header->tree_height_;
 }
 
 }  // namespace njudb
