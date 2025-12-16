@@ -80,7 +80,7 @@ struct BPTreePage
 };
 
 // Internal node structure
-struct BPTreeInternalPage : public BPTreePage
+struct BPTreeInternalPage : public BPTreePage//max_size -> key max size         size ->val size
 {
   int key_size_;
   // Data layout: [BPTreeInternalPage header][children array][keys array]
@@ -155,6 +155,8 @@ public:
     void Next() override;
     auto GetKey() -> Record override;
     auto GetRID() -> RID override;
+
+
 
     auto operator==(const BPTreeIterator &other) const -> bool
     {
