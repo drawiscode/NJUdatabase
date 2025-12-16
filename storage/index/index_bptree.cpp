@@ -35,7 +35,7 @@ namespace njudb {
 
 static void DebugPrintLeaf(const BPTreeLeafPage *leaf_node, const RecordSchema *key_schema)
 {
-  //return;
+  return;
   // print all keys in the leaf node for debugging
 
   page_id_t leaf_page_id = leaf_node->GetPageId();
@@ -49,7 +49,7 @@ static void DebugPrintLeaf(const BPTreeLeafPage *leaf_node, const RecordSchema *
 
 static void DebugPrintInternal(const BPTreeInternalPage *internal_node, const RecordSchema *key_schema)
 {
-  //return;
+  return;
   // print all keys in the internal node for debugging
   page_id_t internal_page_id = internal_node->GetPageId();
   printf("Internal %d: ", internal_page_id);
@@ -503,8 +503,8 @@ void BPTreeInternalPage::CopyNFrom(const char *keys, const page_id_t *values, in
     //auto child = reinterpret_cast<BPTreePage *>(guard.GetData());
     auto child = reinterpret_cast<BPTreePage *>(guard.GetMutableData());
 
-    std::cout<<"子节点id:"<<child->GetPageId()<<std::endl;
-    std::cout<<"正确的父节点id:"<<GetPageId()<<std::endl;
+   // std::cout<<"子节点id:"<<child->GetPageId()<<std::endl;
+   // std::cout<<"正确的父节点id:"<<GetPageId()<<std::endl;
 
     child->SetParentPageId(GetPageId());
    }
@@ -708,9 +708,9 @@ auto BPTreeIndex::InsertIntoLeaf(const Record &key, const RID &value) -> bool
   }
 
   //debug
-  std::cout<<"After leaf split :"<<std::endl;
-  DebugPrintLeaf(leaf, key_schema_);
-  DebugPrintLeaf(new_leaf, key_schema_);
+  //std::cout<<"After leaf split :"<<std::endl;
+  //DebugPrintLeaf(leaf, key_schema_);
+ // DebugPrintLeaf(new_leaf, key_schema_);
 
   // 5. 维护链表
   new_leaf->SetNextPageId(leaf->GetNextPageId());
@@ -760,14 +760,14 @@ void BPTreeIndex::InsertIntoParent(page_id_t old_node_id,const Record &key,page_
       parent->InsertNodeAfter(old_node_id, key, new_node_id);
 
       // debug
-      std::cout << "父节点未满，直接插 ===parent insert ===" << std::endl;
-      DebugPrintInternal(parent, key_schema_);
+     // std::cout << "父节点未满，直接插 ===parent insert ===" << std::endl;
+    //  DebugPrintInternal(parent, key_schema_);
 
       return; //  parent_guard 析构
     }
 
     /* ---------- 父节点满：需要 split ---------- */
-    std::cout << "内部节点需要分裂了" << std::endl;
+   // std::cout << "内部节点需要分裂了" << std::endl;
 
     // 先插再 split（非常重要）
     parent->InsertNodeAfter(old_node_id, key, new_node_id);
@@ -799,8 +799,8 @@ void BPTreeIndex::InsertIntoParent(page_id_t old_node_id,const Record &key,page_
     // split
     parent->MoveHalfTo(new_parent, buffer_pool_manager_);
 
-    DebugPrintInternal(parent, key_schema_);
-    DebugPrintInternal(new_parent, key_schema_);
+   // DebugPrintInternal(parent, key_schema_);
+   // DebugPrintInternal(new_parent, key_schema_);
 
   } // ✅ parent_guard / new_parent_guard / header_guard 全部在这里析构
 
@@ -990,19 +990,49 @@ BPTreeIndex::BPTreeIterator::BPTreeIterator(BPTreeIndex *tree, page_id_t leaf_pa
 
 auto BPTreeIndex::BPTreeIterator::IsValid() -> bool
 {
-  return leaf_page_id_ != INVALID_PAGE_ID;
+    if (leaf_page_id_ == INVALID_PAGE_ID) return false;
+
+    auto guard = tree_->buffer_pool_manager_->FetchPageRead(tree_->index_id_, leaf_page_id_);
+    auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
+    return index_ >= 0 && index_ < leaf->GetSize();
 }
 
 void BPTreeIndex::BPTreeIterator::Next()
 {
-  auto guard = tree_->buffer_pool_manager_->FetchPageRead(tree_->index_id_, leaf_page_id_);
+  if (!IsValid()) 
+  {
+    return;
+  }
+
+  auto guard =tree_->buffer_pool_manager_->FetchPageRead(tree_->index_id_, leaf_page_id_);
   auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
 
   index_++;
-  if (index_ >= leaf->GetSize()) 
+
+  // 当前 leaf 还有 key
+  if (index_ < leaf->GetSize()) 
   {
-    leaf_page_id_ = leaf->GetNextPageId();
-    index_ = 0;
+    return;
+  }
+
+  //  当前 leaf 用完，跳下一个
+  page_id_t next_leaf = leaf->GetNextPageId();
+  if (next_leaf == INVALID_PAGE_ID) 
+  {
+    leaf_page_id_ = INVALID_PAGE_ID;
+    return;
+  }
+
+  leaf_page_id_ = next_leaf;
+  index_ = 0;
+
+  //  防御：下一个 leaf 是空
+  auto next_guard =tree_->buffer_pool_manager_->FetchPageRead(tree_->index_id_, leaf_page_id_);
+  auto next_leaf_page =reinterpret_cast<const BPTreeLeafPage *>(next_guard.GetData());
+
+  if (next_leaf_page->GetSize() == 0) 
+  {
+    leaf_page_id_ = INVALID_PAGE_ID;
   }
 }
 
@@ -1037,18 +1067,23 @@ auto BPTreeIndex::Begin() -> std::unique_ptr<IIterator>
 
 auto BPTreeIndex::Begin(const Record &key) -> std::unique_ptr<IIterator>
 {
-  if (IsEmpty()) 
-  {
+ if (IsEmpty()) return End();
+
+    page_id_t leaf_page_id = FindLeafPage(key, false);
+    while (leaf_page_id != INVALID_PAGE_ID) {
+        auto guard = buffer_pool_manager_->FetchPageRead(index_id_, leaf_page_id);
+        auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
+
+        int index = leaf->LowerBound(key, key_schema_);
+        if (index < leaf->GetSize()) {
+            return std::make_unique<BPTreeIterator>(this, leaf_page_id, index);
+        }
+
+        // 当前 leaf 全部小于 key，跳到下一个 leaf
+        leaf_page_id = leaf->GetNextPageId();
+    }
+
     return End();
-  }
-
-  page_id_t leaf_page_id = FindLeafPage(key,false);
-  auto guard = buffer_pool_manager_->FetchPageRead(index_id_, leaf_page_id);
-  auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
-
-  int index = leaf->LowerBound(key, key_schema_);
-
-  return std::make_unique<BPTreeIterator>(this,leaf_page_id, index);
 }
 
 auto BPTreeIndex::End() -> std::unique_ptr<IIterator>
