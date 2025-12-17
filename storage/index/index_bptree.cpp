@@ -633,8 +633,57 @@ auto BPTreeIndex::FindLeafPage(const Record &key, bool leftMost) -> page_id_t
 
 auto BPTreeIndex::FindLeafPageForRange(const Record &key, bool isLowerBound) -> page_id_t
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return INVALID_PAGE_ID;
+  auto header_guard =buffer_pool_manager_->FetchPageRead(index_id_, FILE_HEADER_PAGE_ID);
+  auto header =reinterpret_cast<const BPTreeIndexHeader *>(header_guard.GetData());
+
+  page_id_t page_id = header->root_page_id_;
+  if (page_id == INVALID_PAGE_ID) 
+  {
+    return INVALID_PAGE_ID;
+  }
+
+  while (true) 
+  {
+    page_id_t next_page_id;
+    {
+      auto page_guard =buffer_pool_manager_->FetchPageRead(index_id_, page_id);
+      auto page =reinterpret_cast<const BPTreePage *>(page_guard.GetData());
+
+      if (page->IsLeaf()) 
+      {
+        return page_id;
+      }
+
+      auto internal =reinterpret_cast<const BPTreeInternalPage *>(page);
+
+      if (isLowerBound)
+      {
+        // lower_bound: 找第一个 key >= target
+        int i = 1;
+        int n = internal->GetSize();  // key 数
+
+        for (; i < n; i++) 
+        {
+          // 构造 Record 才能 Compare
+          Record internal_key(key_schema_, nullptr, internal->KeyAt(i), INVALID_RID);
+
+          if (Record::Compare(key, internal_key) <= 0) 
+          {
+            break;
+          }
+        }
+
+        next_page_id = internal->ValueAt(i-1);
+      } 
+      else 
+      {
+        // 点查找 / upper_bound 语义
+        next_page_id = internal->Lookup(key, key_schema_);
+      }
+    } // page_guard 在这里析构，自动 Unpin
+
+    page_id = next_page_id;
+  }
 }
 
 void BPTreeIndex::StartNewTree(const Record &key, const RID &value) 
@@ -914,8 +963,34 @@ void BPTreeIndex::Insert(const Record &key, const RID &rid)
 
 auto BPTreeIndex::Delete(const Record &key) -> bool
 {
-  NJUDB_STUDENT_TODO(l4, t1);
-  return false;
+  std::unique_lock lock(index_latch_);
+
+    if (IsEmpty()) return false;
+
+    // 1找到包含 key 的叶子节点
+    page_id_t leaf_page_id = FindLeafPage(key, false);
+    if (leaf_page_id == INVALID_PAGE_ID) return false;
+
+    auto leaf_guard = buffer_pool_manager_->FetchPageWrite(index_id_, leaf_page_id);
+    auto leaf = reinterpret_cast<BPTreeLeafPage *>(leaf_guard.GetMutableData());
+
+    // 2 删除 key
+    int old_size = leaf->GetSize();
+    leaf->RemoveRecord(key, key_schema_);
+    if (leaf->GetSize() == old_size) return false; // key 不存在
+
+    // 3更新 header 中的 num_entries
+    auto header_guard = buffer_pool_manager_->FetchPageWrite(index_id_, FILE_HEADER_PAGE_ID);
+    auto header = reinterpret_cast<BPTreeIndexHeader *>(header_guard.GetMutableData());
+    header->num_entries_--;
+
+    // 4检查是否需要合并或重分配
+    if (!leaf->IsSafe(false)) 
+    {
+        CoalesceOrRedistribute(leaf_page_id);
+    }
+
+    return true;
 }
 
 auto BPTreeIndex::CoalesceOrRedistribute(page_id_t node_id) -> bool
@@ -961,23 +1036,27 @@ auto BPTreeIndex::SearchRange(const Record &low_key, const Record &high_key) -> 
   std::vector<RID> result;
 
   page_id_t leaf_id = FindLeafPageForRange(low_key, true);
-  while (leaf_id != INVALID_PAGE_ID) 
-  {
-    auto leaf_guard = buffer_pool_manager_->FetchPageRead(index_id_, leaf_id);
-    auto leaf = reinterpret_cast<const BPTreeLeafPage *>(leaf_guard.GetData());
+  bool first_leaf = true;
 
-    for (int i = 0; i < leaf->GetSize(); i++) 
-    {
-      Record key(key_schema_,nullptr,leaf->KeyAt(i),INVALID_RID);
-      if (Record::Compare(key, high_key) > 0) 
-      {
+  while (leaf_id != INVALID_PAGE_ID) {
+    auto guard = buffer_pool_manager_->FetchPageRead(index_id_, leaf_id);
+    auto leaf = reinterpret_cast<const BPTreeLeafPage *>(guard.GetData());
+
+    int start = 0;
+    if (first_leaf) {
+      start = leaf->LowerBound(low_key, key_schema_);
+      first_leaf = false;
+    }
+
+    for (int i = start; i < leaf->GetSize(); i++) {
+      Record key(key_schema_, nullptr, leaf->KeyAt(i), INVALID_RID);
+
+      if (Record::Compare(key, high_key) > 0) {
         return result;
       }
-      if (Record::Compare(key, low_key) >= 0) 
-      {
-        result.push_back(leaf->ValueAt(i));
-      }
+      result.push_back(leaf->ValueAt(i));
     }
+
     leaf_id = leaf->GetNextPageId();
   }
   return result;
