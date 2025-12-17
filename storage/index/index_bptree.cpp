@@ -1011,7 +1011,7 @@ auto BPTreeIndex::Delete(const Record &key) -> bool
     auto header = reinterpret_cast<BPTreeIndexHeader *>(header_guard.GetMutableData());
     header->num_entries_--;
 
-    // 3 检查 leaf 是否需要合并或借位
+    // 3 检查 leaf 是否需要合并或借位12
     if (!leaf->IsRoot() && !leaf->IsSafe(false)) 
     {
   //    std::cout<<"leaf 需要合并或借位"<<std::endl;
